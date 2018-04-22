@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Interfaz básica de Telecomandas</title>
+</head>
+<body>
+	<h1>Interfaz básica de Telecomandas</h1>
+	
+	<div id="divMesas"></div>
+	<div id="divMesaActual">
+		<label id="lblMesaActual"></label>
+		<button id="btnConfirmar" onclick="confirmarComanda()">Confirmar comanda</button>
+		<br>
+		<div id="divComandaTemporal"></div>
+		<div id="divComanda"></div>
+	</div>
+	<table id="tableBotones"></table>
+	<div id="divErrores"></div>
+</body>
+<script>
+	var mesaActual=null;
+	iniciar();
+	
+	function confirmarComanda() {
+		var request=new XMLHttpRequest();
+		request.open("post", "recibirComanda.jsp");
+		request.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+		request.onreadystatechange = function() {
+			if (request.readyState==4 && request.status==200) {
+				console.log(request.responseText);
+				var respuesta=JSON.parse(request.responseText);
+				if (respuesta.resultado=="OK") {
+					mesaActual.platos=[];
+					showMesaActual();
+				} else {
+					alert(respuesta.mensaje);
+				}
+			}
+		};
+		var p=JSON.stringify(mesaActual);
+		request.send("p=" + p);
+	}
+	
+	function iniciar() {
+		tableBotones.innerHTML="";
+		getMesas();
+		getCategorias();
+	}
+	
+	function getMesas() {
+		divMesas.innerHTML="";
+		var request=new XMLHttpRequest();
+		request.open("get", "getMesas.jsp");
+		request.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+		request.onreadystatechange = function() {
+			if (request.readyState==4 && request.status==200) {
+				var respuesta=JSON.parse(request.responseText);
+				var tabla=document.createElement("table"); divMesas.appendChild(tabla);
+				tabla.border="1";
+				var tr=document.createElement("tr"); tabla.appendChild(tr);
+				
+				for (var i=0; i<respuesta.length; i++) {
+					var mesa=respuesta[i];
+					var td=document.createElement("td"); tr.appendChild(td);
+					var label=document.createElement("label"); td.appendChild(label); td.appendChild(document.createElement("br"));
+					label.innerHTML="Mesa " + mesa._id;
+					var btnCambiarEstado=document.createElement("button"); td.appendChild(btnCambiarEstado); td.appendChild(document.createElement("br"));
+					if (mesa.estado=="Libre") 
+						btnCambiarEstado.innerHTML="Abrir";
+					else {
+						btnCambiarEstado.innerHTML="Cerrar";
+						var btnSeleccionarMesa=document.createElement("button"); td.appendChild(btnSeleccionarMesa); td.appendChild(document.createElement("br"));
+						btnSeleccionarMesa.innerHTML="Seleccionar";
+						btnSeleccionarMesa.setAttribute("onclick", "seleccionar(" + mesa._id + ")");
+					}
+					btnCambiarEstado.setAttribute("onclick", "cambiarEstado(" + mesa._id + ", '" + mesa.estado + "')");
+				}
+				showMesaActual();
+			}
+		};	
+		request.send();
+	}
+	
+	function getCategorias() {
+		divMesas.innerHTML="";
+		var request=new XMLHttpRequest();
+		request.open("get", "getCategorias.jsp");
+		request.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+		request.onreadystatechange = function() {
+			if (request.readyState==4 && request.status==200) {
+				var respuesta=JSON.parse(request.responseText);
+				var tr=document.createElement("tr"); tableBotones.appendChild(tr);
+				
+				for (var i=0; i<respuesta.length; i++) {
+					var categoria=respuesta[i];
+					var td=document.createElement("td"); tr.appendChild(td);
+					var btn=document.createElement("button"); td.appendChild(btn); td.appendChild(document.createElement("br"));
+					btn.innerHTML=categoria.nombre;
+					btn.setAttribute("onclick", "getPlatosDeCategoria('" + categoria._id + "')");
+					btn.setAttribute("style", "background-color: RED");
+				}
+			}
+		};	
+		request.send();
+	}
+	
+	function getPlatosDeCategoria(idCategoria) {
+		var request=new XMLHttpRequest();
+		request.open("post", "getPlatosDeCategoria.jsp");
+		request.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+		request.onreadystatechange = function() {
+			if (request.readyState==4 && request.status==200) {
+				var respuesta=JSON.parse(request.responseText);
+				var platos=respuesta;
+				tableBotones.innerHTML="";
+				var btn=document.createElement("button"); tableBotones.appendChild(btn);
+				btn.setAttribute("onclick", "iniciar()");
+				btn.innerHTML="Atrás";
+				for (var i=0; i<platos.length; i++) {
+					btn=document.createElement("button"); tableBotones.appendChild(btn);
+					btn.innerHTML=platos[i].nombre + " ... " + platos[i].precio;
+					// btn.setAttribute("onclick", "elegirPlato('" + platos[i]._id + "')");
+					btn.setAttribute("onclick", "elegirPlato('" + idCategoria + "', " +
+							"'" + platos[i]._id + "', '" + platos[i].nombre + "')");
+					btn.setAttribute("style", "background-color: ORANGE");
+				}
+				mostrarComanda(respuesta);
+			}
+		};	
+		var p = {
+			idCategoria : idCategoria
+		};
+		request.send("p=" + JSON.stringify(p));
+	}
+	
+	function elegirPlato(idCategoria, idPlato, nombre) {
+		if (mesaActual==null) {
+			alert("Elige una mesa");
+			return;
+		}
+		mesaActual.addPlato(idCategoria, idPlato, nombre);
+		showMesaActual();
+	}
+	
+	function mostrarComanda(respuesta) {
+		if (respuesta.comanda!=undefined) {
+			var comanda=respuesta.comanda;
+			var horaApertura = comanda.horaApertura;
+			var platos=comanda.platos;
+			divComanda.innerHTML="";
+			for (var i=0; i<platos.length; i++) {
+				var plato=platos[i];
+				var span=document.createElement("span");
+				span.innerHTML=plato.unidades + " ... " + plato.nombre + " ... " + plato.precio + "€";
+				divComanda.appendChild(span); divComanda.appendChild(document.createElement("br"));
+			}
+		} else 
+			divComanda.innerHTML="La comanda está vacía";
+	}
+	
+	function seleccionar(idMesa) {
+		var request=new XMLHttpRequest();
+		request.open("post", "getEstadoMesa.jsp", false);
+		request.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+		request.onreadystatechange = function() {
+			if (request.readyState==4 && request.status==200) {
+				var respuesta=JSON.parse(request.responseText);
+				mesaActual=new Mesa(idMesa);
+				showMesaActual();
+				if (respuesta.comanda!=undefined) {
+					var comanda=respuesta.comanda;
+					var horaApertura = comanda.horaApertura;
+					var platos=comanda.platos;
+					divComanda.innerHTML="";
+					for (var i=0; i<platos.length; i++) {
+						var plato=platos[i];
+						var span=document.createElement("span");
+						span.innerHTML=plato.unidades + " ... " + plato.nombre + " ... " + plato.precio + "€";
+						divComanda.appendChild(span); divComanda.appendChild(document.createElement("br"));
+					}
+				} else 
+					divComanda.innerHTML="La comanda está vacía";
+			}
+		};	
+		var p = {
+			_id : idMesa
+		};
+		request.send("p=" + JSON.stringify(p));
+	}
+	
+	function showMesaActual() {
+		lblMesaActual.innerHTML="Mesa seleccionada: ninguna";
+		if (mesaActual!=null) {
+			lblMesaActual.innerHTML="Mesa seleccionada: " + mesaActual.id;
+			divComandaTemporal.innerHTML="";
+			for (var i=0; i<mesaActual.platos.length; i++) {
+				var btn=document.createElement("button");
+				divComandaTemporal.appendChild(btn);
+				btn.innerHTML=mesaActual.platos[i].nombre;
+			}
+		}
+	}
+	
+	function cambiarEstado(idMesa, estado) {
+		var request=new XMLHttpRequest();
+		if (estado=="Libre")
+			request.open("post", "abrirMesa.jsp");
+		else
+			request.open("post", "cerrarMesa.jsp");
+		request.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+		request.onreadystatechange = function() {
+			if (request.readyState==4 && request.status==200) {
+				var respuesta=JSON.parse(request.responseText);
+				if (respuesta.resultado=="OK") {
+					getMesas();
+					if (estado=="Libre")
+						mesaActual=new Mesa(idMesa);
+					else
+						mesaActual=null;
+					showMesaActual();
+				} else
+					divErrores.innerHTML=respuesta.mensaje;
+			}
+		};	
+		var p = {
+			_id : idMesa
+		};
+		request.send("p=" + JSON.stringify(p));
+	}
+	
+	
+	function Mesa(id) {
+		this.id=id;
+		this.platos=[];
+	}
+	
+	Mesa.prototype.addPlato = function(idCategoria, idPlato, nombre) {
+		var plato=null;
+		for (var i=0; i<this.platos.length; i++) {
+			var auxi=this.platos[i];
+			if (auxi.idCategoria==idCategoria && auxi.idPlato==idPlato) {
+				plato=auxi;
+				break;
+			}
+		}
+		if (plato==null) {
+			plato=new Plato(idCategoria, idPlato, nombre);
+			this.platos.push(plato);
+		}
+		plato.unidades=plato.unidades+1;
+	}
+	
+	function Plato(idCategoria, idPlato, nombre) {
+		this.idCategoria=idCategoria;
+		this.idPlato=idPlato;
+		this.nombre=nombre;
+		this.unidades=0;
+	}
+</script>
+</html>
